@@ -1,7 +1,10 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { User } from "../models/user.model.js";
-import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import {
+  uploadOnCloudinary,
+  deleteFromCloudinary,
+} from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
@@ -54,6 +57,8 @@ const registerUser = asyncHandler(async (req, res) => {
   const avatar = await uploadOnCloudinary(avatarLocalPath);
 
   const coverImage = await uploadOnCloudinary(coverImageLocalPath);
+
+  console.log(avatar);
 
   if (!avatar) {
     throw new ApiError(400, "Avatar file is required");
@@ -289,6 +294,17 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Error while uploading on avatar");
   }
 
+
+  //----------To delete the existing file on cludinary-------------------
+  const oldFileUrl = req.user?.avatar;
+  if (!oldFileUrl) {
+    throw new ApiError(404, "The old cloudinary file is not found");
+  }
+  const isFileDeleted = await deleteFromCloudinary(oldFileUrl);
+  if (!isFileDeleted) {
+    throw new ApiError(400, " The file is not deleted in cloudinary");
+  }
+//------------------------------------------------------------------------
   const user = await User.findByIdAndUpdate(
     req.user._id,
     {
@@ -318,6 +334,21 @@ const updateCoverImage = asyncHandler(async (req, res) => {
   if (!coverImage.url) {
     throw new ApiError(400, "Error while uploading on cover Image");
   }
+
+
+  //To delete the existing file on cloudinary
+  const oldFileUrl = req.user?.coverImage;
+  if (!oldFileUrl) {
+    throw new ApiError(404, "The old cloudinary file is not found");
+  }
+  const isFileDeleted = await deleteFromCloudinary(oldFileUrl);
+  if (!isFileDeleted) {
+    throw new ApiError(400, " The file is not deleted in cloudinary");
+  }
+  //----------------------------------------
+
+
+
 
   const user = await User.findByIdAndUpdate(
     req.user?._id,

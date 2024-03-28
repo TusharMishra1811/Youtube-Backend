@@ -6,7 +6,9 @@ import { Video } from "../models/video.model.js";
 import { Subscription } from "../models/subscription.model.js";
 import { Like } from "../models/like.model.js";
 
-const getChannelStats = asyncHandler(async (req, res) => {});
+const getChannelStats = asyncHandler(async (req, res) => {
+    
+});
 
 const getChannelVideos = asyncHandler(async (req, res) => {});
 
