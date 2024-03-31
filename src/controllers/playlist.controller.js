@@ -8,7 +8,7 @@ const createPlaylist = asyncHandler(async (req, res) => {
   //create a playlist with the name and the description
   const { name, description } = req.body;
 
-  if (!name || description) {
+  if (!name || !description) {
     throw new ApiError(400, "Please provide name and description");
   }
 
