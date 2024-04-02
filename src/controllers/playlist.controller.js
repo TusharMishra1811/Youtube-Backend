@@ -60,7 +60,7 @@ const getUserPlaylist = asyncHandler(async (req, res) => {
   const getPlaylist = await Playlist.aggregate([
     {
       $match: {
-        owner: userId,
+        owner: new mongoose.Types.ObjectId(userId),
       },
     },
     {
@@ -274,41 +274,33 @@ const updatePlaylist = asyncHandler(async (req, res) => {
     throw new ApiError(404, "The playlist is not found");
   }
 
-  if (name) {
-    const updateName = await Playlist.updateOne(
+  const updateObj = {};
+
+  if (name) updateObj.name = name;
+
+  if (description) updateObj.description = description;
+
+  if (Object.keys(updateObj).length > 0) {
+    const result = await Playlist.updateOne(
       {
         _id: playlistId,
         owner: req.user?._id,
       },
       {
-        $set: {
-          name,
-        },
+        $set: updateObj,
       }
     );
   }
 
-  if (description) {
-    const updateDesc = await Playlist.updateOne(
-      {
-        _id: playlistId,
-        owner: req.user?._id,
-      },
-      {
-        $set: {
-          description,
-        },
-      }
-    );
+  if (!result) {
+    throw new ApiError(400, "The playlist is not updated");
   }
 
-  if (updateName || updateDesc) {
-    return res
-      .status(200)
-      .json(
-        new ApiResponse(200, playlist, "the Playlist is updated successfully")
-      );
-  }
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(200, result, "the Playlist is updated successfully")
+    );
 });
 
 export {

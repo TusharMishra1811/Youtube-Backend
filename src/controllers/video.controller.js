@@ -43,7 +43,7 @@ const getAllVideos = asyncHandler(async (req, res) => {
   const videos = await Video.aggregate([
     {
       $match: {
-        owner: user._id,
+        owner: new mongoose.Types.ObjectId(user._id),
         title: {
           $regex: query.trim(),
           $options: "i", //This option specifies case-insensitive matching for the regex pattern. It ensures that the search is case-insensitive, so uppercase and lowercase letters are treated as equivalent.
