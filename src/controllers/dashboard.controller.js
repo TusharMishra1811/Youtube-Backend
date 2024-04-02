@@ -7,7 +7,16 @@ import { Subscription } from "../models/subscription.model.js";
 import { Like } from "../models/like.model.js";
 
 const getChannelStats = asyncHandler(async (req, res) => {
-    
+  //(total videos views, total subscribers, total videos, total likes)
+
+
+
+
+
+
+
+
+  
 });
 
 const getChannelVideos = asyncHandler(async (req, res) => {
