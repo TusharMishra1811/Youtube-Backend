@@ -8,6 +8,8 @@ import {
   deleteFromCloudinary,
   uploadOnCloudinary,
 } from "../utils/cloudinary.js";
+import { Like } from "../models/like.model.js";
+import { Comment } from "../models/comment.model.js";
 
 const getAllVideos = asyncHandler(async (req, res) => {
   let {
@@ -136,7 +138,7 @@ const getVideoById = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Video is not found");
   }
 
-  await Video.findByIdAndUpdate(
+  await User.findByIdAndUpdate(
     req.user?._id,
     {
       $addToSet: {
@@ -144,6 +146,18 @@ const getVideoById = asyncHandler(async (req, res) => {
       },
     },
     { new: true }
+  );
+
+  await Video.findOneAndUpdate(
+    { _id: videoId },
+    {
+      $inc: {
+        views: 1,
+      },
+    },
+    {
+      new: true,
+    }
   );
 
   return res
@@ -225,6 +239,61 @@ const updateVideo = asyncHandler(async (req, res) => {
 
 const deleteVideo = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
+
+  if (!isValidObjectId(videoId)) {
+    throw new ApiError(400, "The vide id is not valid");
+  }
+
+  const video = await Video.findById(videoId);
+
+  if (!video) {
+    throw new ApiError(404, "The video is not found");
+  }
+
+  const videoUrl = video.videoFile;
+  const thumbnailUrl = video.thumbnail;
+
+  const videoToDelete = await Video.findOneAndDelete({
+    _id: videoId,
+    owner: req.user?._id,
+  });
+
+  if (!videoToDelete) {
+    throw new ApiError(400, "The video is not deleted successfully");
+  }
+
+  const deleteVideoFile = await deleteFromCloudinary(videoUrl);
+
+  const deleteThumbnail = await deleteFromCloudinary(thumbnailUrl);
+
+  if (!deleteVideoFile) {
+    throw new ApiError(400, "The video file is not deleted from cloudinary");
+  }
+
+  if (!deleteThumbnail) {
+    throw new ApiError(
+      400,
+      "The thumbnail file is not deleted from cloudinary"
+    );
+  }
+
+  //Delete all the instances of video from likes, comments anduser watch history
+
+  const deleteLikes = await Like.deleteMany({ video: videoId });
+  if (!deleteLikes) {
+    throw new ApiError(400, "The likes of the videos are not deleted");
+  }
+
+  const deleteComments = await Comment.deleteMany({ video: videoId });
+  if (!deleteComments) {
+    throw new ApiError(400, "The comments are not deleted for the video");
+  }
+
+  //Todo : Delete video from user watch history
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, {}, "the video is deleted successfully"));
 });
 
 const togglePublishStatus = asyncHandler(async (req, res) => {
