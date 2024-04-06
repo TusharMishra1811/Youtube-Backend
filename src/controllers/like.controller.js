@@ -68,8 +68,8 @@ const toggleCommentLike = asyncHandler(async (req, res) => {
     throw new ApiError(404, "The Comment is not found");
   }
 
-  const isCommentLiked = await Comment.findOne({
-    comment: comment._id,
+  const isCommentLiked = await Like.findOne({
+    comment: commentId,
     likedBy: req.user?._id,
   });
 
@@ -111,9 +111,8 @@ const toggleTweetLike = asyncHandler(async (req, res) => {
     throw new ApiError(404, "The tweet is not found with this id");
   }
 
-  const isTweetLiked = await Tweet.findOne({
+  const isTweetLiked = await Like.findOne({
     tweet: tweet._id,
-    likedBy: req.user?._id,
   });
 
   if (isTweetLiked) {

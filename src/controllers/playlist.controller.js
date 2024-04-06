@@ -165,19 +165,23 @@ const addVideoToPlaylist = asyncHandler(async (req, res) => {
     },
     {
       $addToSet: {
-        video: videoId,
+        videos: videoId,
       },
     }
   );
 
-  if (!updatePlaylist) {
+  if (!updatedPlaylist) {
     throw new ApiError(400, "The video is not added to the playlist");
   }
 
   return res
     .status(200)
     .json(
-      new ApiResponse(200, updatePlaylist, "The video is added to the playlist")
+      new ApiResponse(
+        200,
+        updatedPlaylist,
+        "The video is added to the playlist"
+      )
     );
 });
 
@@ -280,8 +284,10 @@ const updatePlaylist = asyncHandler(async (req, res) => {
 
   if (description) updateObj.description = description;
 
+  let result;
+
   if (Object.keys(updateObj).length > 0) {
-    const result = await Playlist.updateOne(
+    result = await Playlist.updateOne(
       {
         _id: playlistId,
         owner: req.user?._id,
@@ -298,9 +304,7 @@ const updatePlaylist = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(
-      new ApiResponse(200, result, "the Playlist is updated successfully")
-    );
+    .json(new ApiResponse(200, result, "the Playlist is updated successfully"));
 });
 
 export {

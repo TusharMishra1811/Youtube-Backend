@@ -12,13 +12,13 @@ const toggleSubscription = asyncHandler(async (req, res) => {
     throw new ApiError(400, "The channel id is not valid");
   }
 
-  const channel = await User.findById(req.user?._id);
+  const channel = await User.findById(channelId);
 
   if (!channel) {
     throw new ApiError(404, "The channel is not found");
   }
 
-  if (channel._id.toString() !== req.user?._id.toString()) {
+  if (channel._id.toString() === req.user?._id.toString()) {
     throw new ApiError(400, "Can not subscribe to own channel");
   }
 
@@ -50,7 +50,13 @@ const toggleSubscription = asyncHandler(async (req, res) => {
 
     return res
       .status(200)
-      .json(new ApiError(200, "The channel is subscribed successfully"));
+      .json(
+        new ApiResponse(
+          200,
+          channelSubscribed,
+          "The channel is subscribed successfully"
+        )
+      );
   }
 });
 
@@ -109,6 +115,8 @@ const getUserChannelSubscribers = asyncHandler(async (req, res) => {
 
 const getSubscribedChannels = asyncHandler(async (req, res) => {
   const { subscriberId } = req.params;
+
+  // const subscriberId = req.user._id;
 
   if (!isValidObjectId(subscriberId)) {
     throw new ApiError(400, "The subscriber id is ntot avalid");

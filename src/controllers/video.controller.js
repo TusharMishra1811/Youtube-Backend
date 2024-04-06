@@ -10,6 +10,7 @@ import {
 } from "../utils/cloudinary.js";
 import { Like } from "../models/like.model.js";
 import { Comment } from "../models/comment.model.js";
+import { Playlist } from "../models/playlist.model.js";
 
 const getAllVideos = asyncHandler(async (req, res) => {
   let {
@@ -241,7 +242,7 @@ const deleteVideo = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
 
   if (!isValidObjectId(videoId)) {
-    throw new ApiError(400, "The vide id is not valid");
+    throw new ApiError(400, "The video id is not valid");
   }
 
   const video = await Video.findById(videoId);
@@ -250,21 +251,67 @@ const deleteVideo = asyncHandler(async (req, res) => {
     throw new ApiError(404, "The video is not found");
   }
 
-  const videoUrl = video.videoFile;
-  const thumbnailUrl = video.thumbnail;
-
-  const videoToDelete = await Video.findOneAndDelete({
-    _id: videoId,
-    owner: req.user?._id,
-  });
-
-  if (!videoToDelete) {
-    throw new ApiError(400, "The video is not deleted successfully");
+  if (video.owner.toString() !== req.user?._id.toString()) {
+    throw new ApiError(400, "You are not authorized to delete this video");
   }
 
-  const deleteVideoFile = await deleteFromCloudinary(videoUrl);
+  const deletedVideo = await Video.findByIdAndDelete(videoId);
 
-  const deleteThumbnail = await deleteFromCloudinary(thumbnailUrl);
+  if (!deletedVideo) {
+    throw new ApiError(400, "The video is not deleted from the database");
+  }
+
+  //Delete all the instances of video from the comments
+
+  const deletedComments = await Comment.deleteMany({ video: videoId });
+
+  if (!deletedComments) {
+    throw new ApiError(400, "The video comments are not deleted successfully");
+  }
+  //----------------------------------------------------------------------------
+
+  //Delete all the instances of the video from the likes
+
+  const deletedLikes = await Like.deleteMany({ video: videoId });
+
+  if (!deletedLikes) {
+    throw new ApiError(400, "The video likes are not deleted successfully");
+  }
+  //------------------------------------------------------------------------------
+
+  //Delete the instances of the video from the playlist
+
+  const deletedVideoFromPlaylist = await Playlist.updateMany(
+    {},
+    { $pull: { videos: videoId } },
+    { multi: true }
+  );
+
+  if (!deletedVideoFromPlaylist) {
+    throw new ApiError(400, "The video is not deleted from the playlists");
+  }
+
+  //-------------------------------------------------------------------------------------
+
+  //Delete the video from the watch history of the users
+
+  const deletedVideFromWatchHistory = await User.updateMany(
+    {},
+    { $pull: { watchHistory: videoId } },
+    { multi: true }
+  );
+
+  if (!deletedVideFromWatchHistory) {
+    throw new ApiError(400, "The video is not deleted from the watch history");
+  }
+
+  //----------------------------------------------------------------------------------------
+
+  //Delete the vidoe files from cloudinary
+
+  const deleteVideoFile = await deleteFromCloudinary(video.videoFile, "video");
+
+  const deleteThumbnail = await deleteFromCloudinary(video.thumbnail);
 
   if (!deleteVideoFile) {
     throw new ApiError(400, "The video file is not deleted from cloudinary");
@@ -276,24 +323,10 @@ const deleteVideo = asyncHandler(async (req, res) => {
       "The thumbnail file is not deleted from cloudinary"
     );
   }
-
-  //Delete all the instances of video from likes, comments anduser watch history
-
-  const deleteLikes = await Like.deleteMany({ video: videoId });
-  if (!deleteLikes) {
-    throw new ApiError(400, "The likes of the videos are not deleted");
-  }
-
-  const deleteComments = await Comment.deleteMany({ video: videoId });
-  if (!deleteComments) {
-    throw new ApiError(400, "The comments are not deleted for the video");
-  }
-
-  //Todo : Delete video from user watch history
-
+  //---------------------------------------------------------------------------------------------
   return res
     .status(200)
-    .json(new ApiResponse(200, {}, "the video is deleted successfully"));
+    .json(new ApiResponse(200, {}, "The video is deleted successfully"));
 });
 
 const togglePublishStatus = asyncHandler(async (req, res) => {
