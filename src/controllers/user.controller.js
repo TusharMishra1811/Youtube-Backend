@@ -252,7 +252,7 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(new ApiResponse(200, {}, "Password is changed successfullly"));
+    .json(new ApiResponse(200, { user }, "Password is changed successfullly"));
 });
 
 const getCurrentUser = asyncHandler(async (req, res) => {
@@ -294,7 +294,6 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Error while uploading on avatar");
   }
 
-
   //----------To delete the existing file on cludinary-------------------
   const oldFileUrl = req.user?.avatar;
   if (!oldFileUrl) {
@@ -304,7 +303,7 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
   if (!isFileDeleted) {
     throw new ApiError(400, " The file is not deleted in cloudinary");
   }
-//------------------------------------------------------------------------
+  //------------------------------------------------------------------------
   const user = await User.findByIdAndUpdate(
     req.user._id,
     {
@@ -335,7 +334,6 @@ const updateCoverImage = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Error while uploading on cover Image");
   }
 
-
   //To delete the existing file on cloudinary
   const oldFileUrl = req.user?.coverImage;
   if (!oldFileUrl) {
@@ -346,9 +344,6 @@ const updateCoverImage = asyncHandler(async (req, res) => {
     throw new ApiError(400, " The file is not deleted in cloudinary");
   }
   //----------------------------------------
-
-
-
 
   const user = await User.findByIdAndUpdate(
     req.user?._id,

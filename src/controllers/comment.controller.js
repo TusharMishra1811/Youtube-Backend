@@ -19,16 +19,70 @@ const getVideoComments = asyncHandler(async (req, res) => {
         video: new mongoose.Types.ObjectId(videoId),
       },
     },
+    {
+      $lookup: {
+        from: "users",
+        localField: "owner",
+        foreignField: "_id",
+        as: "owner",
+      },
+    },
+    {
+      $lookup: {
+        from: "likes",
+        localField: "_id",
+        foreignField: "comment",
+        as: "likes",
+      },
+    },
+    {
+      $addFields: {
+        likesCount: {
+          $size: "$likes",
+        },
+
+        owner: {
+          $first: "$owner",
+        },
+        isLiked: {
+          $cond: {
+            if: { $in: [req.user?._id, "$likes.likedBy"] },
+            then: true,
+            else: false,
+          },
+        },
+      },
+    },
+    {
+      $sort: {
+        createdAt: -1,
+      },
+    },
+    {
+      $project: {
+        content: 1,
+        createdAt: 1,
+        likesCount: 1,
+        owner: {
+          username: 1,
+          fullName: 1,
+          avatar: 1,
+        },
+        isLiked: 1,
+      },
+    },
   ]);
 
   if (!comments) {
     throw new ApiError(404, "The video does not have any comments");
   }
 
-  const paginatedComments = await Comment.aggregatePaginate(comments, {
-    page,
-    limit,
-  });
+  const options = {
+    page: parseInt(page, 10),
+    limit: parseInt(limit, 10),
+  };
+
+  const paginatedComments = await Comment.aggregatePaginate(comments, options);
 
   if (!paginatedComments) {
     throw new ApiError(400, "The video does not have any comments");
@@ -132,7 +186,9 @@ const deleteComments = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(new ApiResponse(200, "The comment is deleted successfully"));
+    .json(
+      new ApiResponse(200, { commentId }, "The comment is deleted successfully")
+    );
 });
 
 export { getVideoComments, addComments, updateComments, deleteComments };

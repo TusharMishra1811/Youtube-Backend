@@ -13,67 +13,80 @@ import { Comment } from "../models/comment.model.js";
 import { Playlist } from "../models/playlist.model.js";
 
 const getAllVideos = asyncHandler(async (req, res) => {
-  let {
-    page = 1,
-    limit = 10,
-    query,
-    sortBy = "createdAt",
-    sortType = 1,
-    userId,
-  } = req.query;
+  const { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query;
 
-  page = Number(page);
-  limit = Number(limit);
+  const pipeline = [];
 
-  if (!page) {
-    throw new ApiError(400, "page number is not defined");
-  }
-
-  if (!limit) {
-    throw new ApiError(400, "limit is not defined");
-  }
-
-  if (!userId) {
-    throw new ApiError(404, "user ID is not defined");
-  }
-
-  const user = await User.findById(userId);
-
-  if (!user) {
-    throw new ApiError(404, "user is not found");
-  }
-
-  const videos = await Video.aggregate([
-    {
-      $match: {
-        owner: new mongoose.Types.ObjectId(user._id),
-        title: {
-          $regex: query.trim(),
-          $options: "i", //This option specifies case-insensitive matching for the regex pattern. It ensures that the search is case-insensitive, so uppercase and lowercase letters are treated as equivalent.
+  if (query) {
+    pipeline.push({
+      $search: {
+        index: "search-videos",
+        text: {
+          query: query,
+          path: ["title", "description"],
         },
       },
+    });
+  }
+
+  if (userId) {
+    if (!isValidObjectId(userId)) {
+      throw new ApiError(400, "Invalid User");
+    }
+
+    pipeline.push({
+      $match: {
+        owner: new mongoose.Types.ObjectId(userId),
+      },
+    });
+  }
+
+  pipeline.push({ $match: { isPublished: true } });
+
+  if (sortBy && sortType) {
+    pipeline.push({
+      $sort: {
+        [sortBy]: sortType === "asc" ? 1 : -1,
+      },
+    });
+  } else {
+    pipeline.push({ $sort: { createdAt: -1 } });
+  }
+
+  pipeline.push(
+    {
+      $lookup: {
+        from: "users",
+        localField: "owner",
+        foreignField: "_id",
+        as: "ownerDetails",
+        pipeline: [
+          {
+            $project: {
+              username: 1,
+              avatar: 1,
+            },
+          },
+        ],
+      },
     },
     {
-      $sort: {
-        [sortBy]: sortType, //This is the field by which the documents will be sorted. It's enclosed in square brackets, indicating that it's a dynamic field name. The actual field name will be determined by the value of the sortBy variable.
-      },
-    },
-  ]);
-
-  const paginatedVideos = await Video.aggregatePaginate(videos, {
-    page,
-    limit,
-  });
-
-  return res.status(200).json(
-    new ApiResponse(
-      200,
-      {
-        paginatedVideos,
-      },
-      "Fetched all the videos"
-    )
+      $unwind: "$ownerDetails",
+    }
   );
+
+  const videoAggregate = Video.aggregate(pipeline);
+
+  const options = {
+    page: parseInt(page, 10),
+    limit: parseInt(limit, 10),
+  };
+
+  const video = await Video.aggregatePaginate(videoAggregate, options);
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, video, "Videos Fetched Successfully"));
 });
 
 const publishAVideo = asyncHandler(async (req, res) => {
@@ -113,6 +126,7 @@ const publishAVideo = asyncHandler(async (req, res) => {
     description,
     duration: videoFile?.duration,
     owner: req.user?._id,
+    isPublished: false,
   });
 
   if (!video) {
@@ -133,53 +147,125 @@ const getVideoById = asyncHandler(async (req, res) => {
     throw new ApiError(400, "the video id is not valid");
   }
 
-  const video = await Video.findById(videoId);
-
-  if (!video) {
-    throw new ApiError(404, "Video is not found");
-  }
-
-  await User.findByIdAndUpdate(
-    req.user?._id,
+  const video = await Video.aggregate([
     {
-      $addToSet: {
-        watchHistory: video._id,
+      $match: {
+        _id: new mongoose.Types.ObjectId(videoId),
       },
     },
-    { new: true }
-  );
-
-  await Video.findOneAndUpdate(
-    { _id: videoId },
     {
-      $inc: {
+      $lookup: {
+        from: "likes",
+        localField: "_id",
+        foreignField: "video",
+        as: "likes",
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "owner",
+        foreignField: "_id",
+        as: "owner",
+        pipeline: [
+          {
+            $lookup: {
+              from: "subscriptions",
+              localField: "_id",
+              foreignField: "channel",
+              as: "subscribers",
+            },
+          },
+          {
+            $addFields: {
+              subscribersCount: {
+                $size: "$subscribers",
+              },
+              isSubscribed: {
+                $cond: {
+                  if: {
+                    $in: [req.user?._id, "$subscribers.subscriber"],
+                  },
+                  then: true,
+                  else: false,
+                },
+              },
+            },
+          },
+          {
+            $project: {
+              username: 1,
+              avatar: 1,
+              subscribersCount: 1,
+              isSubscribed: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $addFields: {
+        likesCount: {
+          $size: "$likes",
+        },
+        owner: {
+          $first: "$owner",
+        },
+        isLiked: {
+          $cond: {
+            if: { $in: [req.user?._id, "$likes.likedBy"] },
+            then: true,
+            else: false,
+          },
+        },
+      },
+    },
+    {
+      $project: {
+        videoFile: 1,
+        title: 1,
+        description: 1,
         views: 1,
+        createdAt: 1,
+        duration: 1,
+        comments: 1,
+        owner: 1,
+        likesCount: 1,
+        isLiked: 1,
       },
     },
-    {
-      new: true,
-    }
-  );
-
+  ]);
+  if (!video) {
+    throw new ApiError(500, "Failed to fetch video");
+  }
+  await Video.findByIdAndUpdate(videoId, {
+    $inc: {
+      views: 1,
+    },
+  });
+  await User.findByIdAndUpdate(req.user?._id, {
+    $addToSet: {
+      watchHistory: videoId,
+    },
+  });
   return res
     .status(200)
-    .json(new ApiResponse(200, video, "The video is fetched successfully"));
+    .json(new ApiResponse(200, video[0], "Video details fetched successfully"));
 });
 
 const updateVideo = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
+  const { title, description } = req.body;
 
   if (!isValidObjectId(videoId)) {
     throw new ApiError(400, "Invalid video id");
   }
 
-  const videoToBeUpdated = await Video.findById({ _id: videoId });
+  const videoToBeUpdated = await Video.findById(videoId);
 
   if (videoToBeUpdated.owner.toString() !== req.user?._id.toString()) {
     throw new ApiError(400, "You are not authorized to update this video");
   }
-
-  const { title, description } = req.body;
 
   const thumbnailLocalPath = req.file?.path;
 
@@ -187,18 +273,10 @@ const updateVideo = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Please provide title,description or thumbnail");
   }
 
-  let updateQuery = {};
-
-  if (title) {
-    updateQuery.$set = { title: title };
-  }
-
-  if (description) {
-    updateQuery.$set = { description: description };
-  }
+  let thumbnail;
 
   if (thumbnailLocalPath) {
-    const thumbnail = await uploadOnCloudinary(thumbnailLocalPath);
+    thumbnail = await uploadOnCloudinary(thumbnailLocalPath);
 
     if (!thumbnail.url) {
       throw new ApiError(
@@ -208,7 +286,6 @@ const updateVideo = asyncHandler(async (req, res) => {
     } else {
       const oldThumbnailUrl = videoToBeUpdated.thumbnail;
 
-      console.log(req.user);
       if (!oldThumbnailUrl) {
         throw new ApiError(400, "Old thumbnail file is not found");
       } else {
@@ -218,15 +295,21 @@ const updateVideo = asyncHandler(async (req, res) => {
           throw new ApiError(400, "Old file is not deleted successfully");
         }
       }
-      updateQuery.$set = { thumbnail: thumbnail.url };
     }
   }
 
-  const video = await Video.updateOne(
+  console.log(thumbnail.url);
+
+  const video = await Video.findByIdAndUpdate(
+    videoId,
     {
-      _id: videoId,
+      $set: {
+        title,
+        description,
+        thumbnail: thumbnail.url,
+      },
     },
-    updateQuery
+    { new: true }
   );
 
   if (!video) {
@@ -332,17 +415,19 @@ const deleteVideo = asyncHandler(async (req, res) => {
 const togglePublishStatus = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
 
+  console.log(videoId);
+
   if (!isValidObjectId(videoId)) {
     throw new ApiError(400, "Invalid video id");
   }
 
-  const video = await Video.findById({ _id: videoId });
+  const video = await Video.findById(videoId);
 
   if (!video) {
     throw new ApiError("404", "The video is not found");
   }
 
-  if (video.owner.toString() !== req.user?._id.toString()) {
+  if (video?.owner.toString() !== req.user?._id.toString()) {
     throw new ApiError(400, "You are not authorized to edit this video");
   }
 
@@ -350,7 +435,7 @@ const togglePublishStatus = asyncHandler(async (req, res) => {
     videoId,
     {
       $set: {
-        isPublished: !video.isPublished,
+        isPublished: !video?.isPublished,
       },
     },
     {
@@ -367,7 +452,7 @@ const togglePublishStatus = asyncHandler(async (req, res) => {
     .json(
       new ApiResponse(
         200,
-        updatedVideo,
+        { isPublished: updateVideo.isPublished },
         "The publish status is changed successfully"
       )
     );

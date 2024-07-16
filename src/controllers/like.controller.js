@@ -36,7 +36,13 @@ const toggleVideoLike = asyncHandler(async (req, res) => {
     }
     return res
       .status(200)
-      .json(new ApiResponse(200, {}, "The Video is disliked successfully"));
+      .json(
+        new ApiResponse(
+          200,
+          { isLiked: false },
+          "The Video is disliked successfully"
+        )
+      );
   } else {
     const isVideoLikedSuccessfully = await Like.create({
       video: video._id,
@@ -51,7 +57,13 @@ const toggleVideoLike = asyncHandler(async (req, res) => {
     }
     return res
       .status(200)
-      .json(new ApiResponse(200, {}, "The video is liked successfully"));
+      .json(
+        new ApiResponse(
+          200,
+          { isLiked: true },
+          "The video is liked successfully"
+        )
+      );
   }
 });
 
@@ -83,7 +95,13 @@ const toggleCommentLike = asyncHandler(async (req, res) => {
     }
     return res
       .status(200)
-      .json(new ApiResponse(200, {}, "The comment is disliked successfully"));
+      .json(
+        new ApiResponse(
+          200,
+          { isLiked: false },
+          "The comment is disliked successfully"
+        )
+      );
   } else {
     const isCommentLikedSuccessfully = await Like.create({
       comment: comment._id,
@@ -94,7 +112,9 @@ const toggleCommentLike = asyncHandler(async (req, res) => {
       throw new ApiError(400, "The action of liking the comment succeeded");
     }
 
-    return res.status(200).json(200, {}, "The comment is liked successfully");
+    return res
+      .status(200)
+      .json(200, { isLiked: true }, "The comment is liked successfully");
   }
 });
 
@@ -113,6 +133,7 @@ const toggleTweetLike = asyncHandler(async (req, res) => {
 
   const isTweetLiked = await Like.findOne({
     tweet: tweet._id,
+    likedBy: req.user?._id,
   });
 
   if (isTweetLiked) {
@@ -127,7 +148,13 @@ const toggleTweetLike = asyncHandler(async (req, res) => {
 
     return res
       .status(200)
-      .json(new ApiResponse(200, "The tweet is disliked successfully"));
+      .json(
+        new ApiResponse(
+          200,
+          { isLiked: false },
+          "The tweet is disliked successfully"
+        )
+      );
   } else {
     const isTweetLikedSuccessfully = await Like.create({
       tweet: tweet._id,
@@ -140,7 +167,13 @@ const toggleTweetLike = asyncHandler(async (req, res) => {
 
     return res
       .status(200)
-      .json(new ApiResponse(200, "The tweet is liked successfully"));
+      .json(
+        new ApiResponse(
+          200,
+          { isLiked: true },
+          "The tweet is liked successfully"
+        )
+      );
   }
 });
 
@@ -149,9 +182,6 @@ const getLikedVideos = asyncHandler(async (req, res) => {
     {
       $match: {
         likedBy: new mongoose.Types.ObjectId(req.user?._id),
-        video: {
-          $exists: true,
-        },
       },
     },
     {
@@ -159,23 +189,55 @@ const getLikedVideos = asyncHandler(async (req, res) => {
         from: "videos",
         localField: "video",
         foreignField: "_id",
-        as: "liked_videos",
+        as: "likedVideo",
+        pipeline: [
+          {
+            $lookup: {
+              from: "users",
+              localField: "owner",
+              foreignField: "_id",
+              as: "ownerDetails",
+            },
+          },
+          {
+            $unwind: "$ownerDetails",
+          },
+        ],
+      },
+    },
+    {
+      $unwind: "$likedVideo",
+    },
+    {
+      $sort: {
+        createdAt: -1,
       },
     },
     {
       $project: {
-        liked_videos: {
+        _id: 0,
+        likedVideo: {
           _id: 1,
+          videoFile: 1,
+          thumbnail: 1,
+          owner: 1,
           title: 1,
           description: 1,
           views: 1,
-          owner: 1,
+          duration: 1,
+          createdAt: 1,
+          isPublished: 1,
+          ownerDetails: {
+            username: 1,
+            fullName: 1,
+            avatar: 1,
+          },
         },
       },
     },
   ]);
 
-  if (!likedVideos.length) {
+  if (!likedVideos) {
     throw new ApiError(404, "There are no liked videos");
   }
 
