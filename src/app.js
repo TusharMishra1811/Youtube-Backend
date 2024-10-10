@@ -10,6 +10,7 @@ app.use(
     credentials: true,
   })
 ); // using the cors middleware
+
 app.use(
   express.json({
     limit: "16kb",

@@ -29,17 +29,17 @@ const getAllVideos = asyncHandler(async (req, res) => {
     });
   }
 
-  if (userId) {
-    if (!isValidObjectId(userId)) {
-      throw new ApiError(400, "Invalid User");
-    }
+  // if (userId) {
+  //   if (!isValidObjectId(userId)) {
+  //     throw new ApiError(400, "Invalid User");
+  //   }
 
-    pipeline.push({
-      $match: {
-        owner: new mongoose.Types.ObjectId(userId),
-      },
-    });
-  }
+  //   pipeline.push({
+  //     $match: {
+  //       owner: new mongoose.Types.ObjectId(userId),
+  //     },
+  //   });
+  // }
 
   pipeline.push({ $match: { isPublished: true } });
 
@@ -298,8 +298,6 @@ const updateVideo = asyncHandler(async (req, res) => {
     }
   }
 
-  console.log(thumbnail.url);
-
   const video = await Video.findByIdAndUpdate(
     videoId,
     {
@@ -414,8 +412,6 @@ const deleteVideo = asyncHandler(async (req, res) => {
 
 const togglePublishStatus = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
-
-  console.log(videoId);
 
   if (!isValidObjectId(videoId)) {
     throw new ApiError(400, "Invalid video id");
